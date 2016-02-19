@@ -19,7 +19,7 @@ parser = ArgumentParser(
     description='',
     formatter_class=ArgumentDefaultsHelpFormatter
 )
-parser.set_defaults(sort='title', order='asc')
+parser.set_defaults(sort='created', order='asc')
 parser.add_argument('tab_output_path', type=str,
                     help='path to which to output table')
 parser.add_argument('--bib-output-path', type=str,
@@ -105,7 +105,11 @@ def write_bib_doc(f, doc):
                         % (doc.title, doc.year))
 
     first_author = doc.authors[0]
-    key_stem = u'%s%d' % (u''.join(filter(lambda c: c in string.letters, first_author.last_name.lower())), doc.year)
+    key_stem = u'%s%d' % (
+        u''.join(filter(lambda c: c in string.letters,
+                        first_author.last_name.lower())),
+        doc.year
+    )
     if key_stem in key_stem_offsets:
         suffix = chr(ord('a') + key_stem_offsets[key_stem])
         key_stem_offsets[key_stem] += 1
@@ -125,7 +129,9 @@ def write_bib_doc(f, doc):
 
     f.write(u'    title = {%s},\n' % doc.title)
     f.write(u'    year = {%d},\n' % doc.year)
-    f.write(u'    author = {%s},\n' % ' and '.join(map(lambda a: u'%s, %s' % (a.last_name, a.first_name), doc.authors)))
+    f.write(u'    author = {%s},\n' %
+        ' and '.join(map(lambda a: u'%s, %s' % (a.last_name, a.first_name),
+                         doc.authors)))
 
     if doc.type == 'conference_proceedings':
         f.write(u'    booktitle = {%s},\n' % doc.source)
@@ -145,14 +151,18 @@ def write_bib_doc(f, doc):
 it = session.documents.iter(view='bib', sort=ns.sort, order=ns.order)
 
 
+def _open_output(path):
+    return codecs.open(path, encoding='utf-8', mode='w')
+
+
 if ns.bib_output_path:
-    with codecs.open(ns.bib_output_path, encoding='utf-8', mode='w') as bib_f:
-        with codecs.open(ns.tab_output_path, encoding='utf-8', mode='w') as tab_f:
+    with open_output(ns.bib_output_path) as bib_f:
+        with open_output(ns.tab_output_path) as tab_f:
             for doc in it:
                 write_tab_doc(tab_f, doc)
                 write_bib_doc(bib_f, doc)
 
 else:
-    with codecs.open(ns.tab_output_path, encoding='utf-8', mode='w') as tab_f:
+    with open_output(ns.tab_output_path) as tab_f:
         for doc in it:
             write_tab_doc(tab_f, doc)
