@@ -1,0 +1,158 @@
+from mendeley import Mendeley
+from mendeley.session import MendeleySession
+from mendeley.auth import MendeleyAuthorizationCodeTokenRefresher
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+import string
+import logging
+import codecs
+import json
+import os
+
+
+CONFIG_DIR = os.path.expanduser('~/.papercli')
+
+CLIENT_SECRETS_PATH = os.path.join(CONFIG_DIR, 'client_secrets.json')
+OAUTH_TOKEN_PATH = os.path.join(CONFIG_DIR, 'mauth.cred')
+
+
+parser = ArgumentParser(
+    description='',
+    formatter_class=ArgumentDefaultsHelpFormatter
+)
+parser.set_defaults(sort='title', order='asc')
+parser.add_argument('tab_output_path', type=str,
+                    help='path to which to output table')
+parser.add_argument('--bib-output-path', type=str,
+                    help='path to which to output bibtex file')
+parser.add_argument('--sort', type=str,
+                    choices=('created', 'last_modified', 'title'),
+                    help='key by which to sort documents')
+parser.add_argument('--order', type=str,
+                    choices=('asc, desc'),
+                    help='sort order')
+ns = parser.parse_args()
+
+
+if not os.path.isdir(CONFIG_DIR):
+    os.makedirs(CONFIG_DIR)
+
+
+with open(CLIENT_SECRETS_PATH) as f:
+    config = json.load(f)
+
+
+mendeley = Mendeley(**config)
+auth = mendeley.start_authorization_code_flow()
+
+if os.path.isfile(OAUTH_TOKEN_PATH):
+    with open(OAUTH_TOKEN_PATH) as f:
+        token = json.load(f)
+
+    refresher = MendeleyAuthorizationCodeTokenRefresher(auth)
+    session = MendeleySession(mendeley, token, refresher=refresher)
+
+else:
+    login_url = auth.get_login_url()
+    print 'Go to: %s' % login_url
+    auth_response = raw_input('Redirect URL: ')
+    session = auth.authenticate(auth_response)
+
+    refresher = MendeleyAuthorizationCodeTokenRefresher(auth)
+    session = MendeleySession(mendeley, session.token, refresher=refresher)
+
+    with open(OAUTH_TOKEN_PATH, 'w') as f:
+        json.dump(session.token, f)
+
+
+def write_tab_doc(f, doc):
+    f.write(doc.title if doc.title else '')
+
+    f.write('\t')
+    f.write(doc.source if doc.source else '')
+
+    f.write('\t')
+    f.write(unicode(doc.year) if doc.year else '')
+
+    f.write('\t')
+    if doc.authors:
+        author = doc.authors[0]
+        f.write(u'%s, %s' % (author.last_name, author.first_name))
+        for author in doc.authors:
+            f.write(u' and %s, %s' % (author.last_name, author.first_name))
+
+    f.write('\n')
+
+
+key_stem_offsets = dict()
+
+
+def write_bib_doc(f, doc):
+    if not doc.title:
+        logging.warning('empty title, skipping')
+        return
+
+    if not doc.year:
+        logging.warning('empty year for %s, skipping' % doc.title)
+        return
+
+    if not doc.authors:
+        logging.warning('empty authors for %s (%d), skipping'
+                        % (doc.title, doc.year))
+        return
+
+    if not doc.source:
+        logging.warning('empty source for %s (%d), skipping'
+                        % (doc.title, doc.year))
+
+    first_author = doc.authors[0]
+    key_stem = u'%s%d' % (u''.join(filter(lambda c: c in string.letters, first_author.last_name.lower())), doc.year)
+    if key_stem in key_stem_offsets:
+        suffix = chr(ord('a') + key_stem_offsets[key_stem])
+        key_stem_offsets[key_stem] += 1
+        key_stem = key_stem + suffix
+    else:
+        key_stem_offsets[key_stem] = 0
+
+    if doc.type == 'conference_proceedings':
+        entry_type = 'inproceedings'
+    elif doc.type == 'journal':
+        entry_type = 'article'
+    else:
+        logging.warning('unhandled type %s, skipping' % doc.type)
+        return
+
+    f.write(u'@%s{%s,\n' % (entry_type, key_stem))
+
+    f.write(u'    title = {%s},\n' % doc.title)
+    f.write(u'    year = {%d},\n' % doc.year)
+    f.write(u'    author = {%s},\n' % ' and '.join(map(lambda a: u'%s, %s' % (a.last_name, a.first_name), doc.authors)))
+
+    if doc.type == 'conference_proceedings':
+        f.write(u'    booktitle = {%s},\n' % doc.source)
+    elif doc.type == 'journal':
+        f.write(u'    journal = {%s},\n' % doc.source)
+        if doc.volume is not None:
+            f.write(u'    volume = {%s},\n' % unicode(doc.volume))
+        if doc.issue is not None:
+            f.write(u'    number = {%s},\n' % unicode(doc.issue))
+    else:
+        logging.warning('unhandled type %s, skipping' % doc.type)
+        return
+
+    f.write(u'}\n\n')
+
+
+it = session.documents.iter(view='bib', sort=ns.sort, order=ns.order)
+
+
+if ns.bib_output_path:
+    with codecs.open(ns.bib_output_path, encoding='utf-8', mode='w') as bib_f:
+        with codecs.open(ns.tab_output_path, encoding='utf-8', mode='w') as tab_f:
+            for doc in it:
+                write_tab_doc(tab_f, doc)
+                write_bib_doc(bib_f, doc)
+
+else:
+    with codecs.open(ns.tab_output_path, encoding='utf-8', mode='w') as tab_f:
+        for doc in it:
+            write_tab_doc(tab_f, doc)

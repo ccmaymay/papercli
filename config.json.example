@@ -1,0 +1,5 @@
+{
+    "redirect_uri": "http://localhost:1234/",
+    "client_id": 1234,
+    "client_secret": "1234abcdABCDwxyz"
+}
