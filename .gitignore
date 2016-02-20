@@ -1,0 +1,4 @@
+/papercli.egg-info/
+/build/
+/dist/
+*.pyc

@@ -1,3 +1,5 @@
+#!/usr/bin/env python2.7
+
 from mendeley import Mendeley
 from mendeley.session import MendeleySession
 from mendeley.auth import MendeleyAuthorizationCodeTokenRefresher
@@ -33,6 +35,12 @@ parser.add_argument('--order', type=str,
 ns = parser.parse_args()
 
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)-15s %(levelname)s %(funcName)s: %(message)s'
+)
+
+
 if not os.path.isdir(CONFIG_DIR):
     os.makedirs(CONFIG_DIR)
 
@@ -62,6 +70,7 @@ else:
 
     with open(OAUTH_TOKEN_PATH, 'w') as f:
         json.dump(session.token, f)
+    os.chmod(OAUTH_TOKEN_PATH, 0600)
 
 
 def write_tab_doc(f, doc):
@@ -151,7 +160,7 @@ def write_bib_doc(f, doc):
 it = session.documents.iter(view='bib', sort=ns.sort, order=ns.order)
 
 
-def _open_output(path):
+def open_output(path):
     return codecs.open(path, encoding='utf-8', mode='w')
 
 
