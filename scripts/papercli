@@ -30,7 +30,7 @@ parser.add_argument('--sort', type=str,
                     choices=('created', 'last_modified', 'title'),
                     help='key by which to sort documents')
 parser.add_argument('--order', type=str,
-                    choices=('asc, desc'),
+                    choices=('asc', 'desc'),
                     help='sort order')
 ns = parser.parse_args()
 
